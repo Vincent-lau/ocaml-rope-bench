@@ -1,97 +1,119 @@
 open! Core
 open Core_bench
 
-let (^^) = Rope.(^)
+module type StringLike = sig
+  type t
+  val empty : t
+  val iter : (char -> unit) -> t -> unit
+  val map : (char -> char) -> t -> t
+  val make : int -> char -> t
+  val (^) : t -> t -> t
+end
 
-let (^^^) = CompactRope.(^)
+module StringExtended = struct
+  include String
 
+  type t = string
+  let (^) = (^)
 
-let build_string len = 
-  let b = Bytes.create len in
-  for i = 0 to len - 1 do 
-    Bytes.set b i (char_of_int (Random.int 255))
-  done;
-  Bytes.to_string b
+  let iter f s = String.iter ~f:f s
 
-let rec build_list len acc = 
-  if (len = 0) then 
-    acc
-  else
-    let sl = Random.int 50 in 
-    let rs = build_string sl in
-    build_list (len - 1) (rs :: acc)
-
-
-(* this way of building is actually not perfectly balanced
-all I am doing is alternating which side it is concatnated *)
-
-let rec build_rope len acc lr_flag=
-  if(len = 0) then
-    acc
-  else
-    let r_l = min (Random.int 20) len in
-    let r = Rope.of_string (build_string r_l) in
-    if lr_flag then 
-      build_rope (len-r_l) (acc ^^ r) (not lr_flag)
-    else
-      build_rope (len-r_l) (r ^^ acc) (not lr_flag)
+  let map f s = String.map ~f:f s
+  let empty = ""
+end
 
 
-let rec build_rope_unbalanced len acc =
-  if(len = 0) then
-    acc
-  else
-    let r_l = min (Random.int 20) len in
-    let r = Rope.of_string (build_string r_l) in
-      build_rope_unbalanced (len-r_l) (r ^^ acc) 
-      
+module Make (M : StringLike) = struct
 
-let rec build_compactRope len acc lr_flag=
-  if(len = 0) then
-    acc
-  else
-    let r_l = min (Random.int 20) len in
-    let rope = CompactRope.of_string (build_string r_l) in
-    if lr_flag then 
-      build_compactRope (len-r_l) (acc ^^^ rope) (not lr_flag)
-    else
-      build_compactRope (len-r_l) (rope ^^^ acc) (not lr_flag)
+  let list_len = 1000
+  let len = 1000000
 
-let test_rope = build_rope 1000000 Rope.empty true
-let test_crope = build_compactRope 1000000 CompactRope.empty true
-let test_str = build_string 1000000 
-
-
-(* test for concat *)
-let () =
-  let test_str_list = build_list 1000 [] in
-  let test_rope_list = List.map test_str_list ~f:(Rope.of_string) in
-  Command.run (Bench.make_command [
-    Bench.Test.create ~name:"String concat" (fun () -> 
-      ignore (List.fold test_str_list ~init:"" ~f:(^) ));
-    Bench.Test.create ~name:"Rope concat" (fun () ->
-      ignore (List.fold test_rope_list ~init:Rope.empty ~f:Rope.(^) ));
-  ])
-
-
-(* test iter string vs compactRope  *)
-let () =
+  (* helper functions *)
   let f_it = (fun (c:char) -> ignore(c))
-  and f_map = (fun (c:char) -> c) in
+  let f_map = (fun (c:char) -> c)
+
+  
+
+  let rec build_list len acc = 
+    if (len = 0) then 
+      acc
+    else
+      let sl = Random.int 50 in 
+      let rs = M.make sl 'b' in
+      build_list (len - 1) (rs :: acc)
+
+  let build_rope len alt=
+    let rec build_alternate len acc lr_flag =
+      if(len = 0) then
+        acc
+      else
+        let r_l = min (Random.int 20) len in
+        let r = M.make r_l 'c' in
+        if lr_flag then 
+          build_alternate (len-r_l) (M.(^) acc r) (not lr_flag)
+        else
+          build_alternate (len-r_l) (M.(^) r acc) (not lr_flag)
+    in
+    let rec build_unbalanced len acc =
+      if(len = 0) then
+        acc
+      else
+        let r_l = min (Random.int 20) len in
+        let r = M.make r_l 'c' in
+          build_unbalanced (len-r_l) (M.(^) r acc) 
+    in
+    if alt then build_alternate len M.empty true
+    else build_unbalanced len M.empty
+
+  (* test data *)
+  let cat_list = build_list list_len []
+  let plain_str = M.make len 'c'
+  let alt_rope = build_rope len true
+  let unbalanced_rope = build_rope len false
+
+
+  (* test functions *)
+  let cat = fun () -> ignore (List.fold ~init:M.empty ~f:M.(^) cat_list)
+
+  let iter_str = fun () -> ignore(M.iter f_it plain_str)
+  let map_str = fun ()-> ignore(M.iter f_it plain_str)
+  let iter_alt = fun () -> ignore(M.iter f_it alt_rope)
+  let map_alt = fun () -> ignore(M.map f_map alt_rope)
+  let iter_unbalanced = fun () -> ignore(M.iter f_it unbalanced_rope)
+  let map_unbalanced = fun () -> ignore(M.map f_map unbalanced_rope)
+
+end
+
+
+
+module StringFunctions = Make(StringExtended)
+module RopeFunctions = Make(Rope)
+module CRopeFunctions = Make(CompactRope)
+
+let () =
   Command.run (Bench.make_command [
-    Bench.Test.create ~name:"String iter" (fun () -> 
-      ignore (String.iter ~f:f_it test_str));
-    Bench.Test.create ~name:"Rope iter" (fun () ->
-      ignore (Rope.iter f_it test_rope));
-    Bench.Test.create ~name:"CompactRope iter" (fun () ->
-      ignore (CompactRope.iter f_it test_crope));
-    Bench.Test.create ~name:"String map" (fun () -> 
-      ignore (String.map ~f:f_map test_str));
-    Bench.Test.create ~name:"Rope map" (fun () ->
-      ignore (Rope.map f_map test_rope));
-    Bench.Test.create ~name:"CompactRope map" (fun () -> 
-      ignore (CompactRope.map f_map test_crope));
+    Bench.Test.create ~name:"string_cat" StringFunctions.cat;
+    Bench.Test.create ~name:"rope_cat" RopeFunctions.cat;
+    Bench.Test.create ~name:"crope_cat" CRopeFunctions.cat; 
   ])
-
-
-
+;;
+let () =
+  Command.run (Bench.make_command [
+    Bench.Test.create ~name:"string_iter" StringFunctions.iter_str;
+    Bench.Test.create ~name:"rope_iter_alt" RopeFunctions.iter_alt;
+    Bench.Test.create ~name:"crope_iter_alt" CRopeFunctions.iter_alt; 
+  ])
+;;
+let () =
+  Command.run (Bench.make_command [
+    Bench.Test.create ~name:"string_map" StringFunctions.map_str;
+    Bench.Test.create ~name:"rope_map_alt" RopeFunctions.map_alt;
+    Bench.Test.create ~name:"crope_map_alt" CRopeFunctions.map_alt; 
+  ])
+;;
+let () =
+  Command.run (Bench.make_command [
+    Bench.Test.create ~name:"string_iter" StringFunctions.map_str;
+    Bench.Test.create ~name:"rope_iter_unbalanced" RopeFunctions.map_unbalanced;
+    Bench.Test.create ~name:"crope_iter_unbalanced" CRopeFunctions.map_unbalanced; 
+  ])
