@@ -1,6 +1,8 @@
 open! Core
 open Core_bench
 
+module String = Stdlib.String
+
 module type StringLike = sig
   type t
   val empty : t
@@ -10,15 +12,11 @@ module type StringLike = sig
   val (^) : t -> t -> t
 end
 
+(* to make string 'string-like' *)
 module StringExtended = struct
   include String
 
-  type t = string
   let (^) = (^)
-
-  let iter f s = String.iter ~f:f s
-
-  let map f s = String.map ~f:f s
   let empty = ""
 end
 
@@ -43,6 +41,7 @@ module Make (M : StringLike) = struct
       build_list (len - 1) (rs :: acc)
 
   let build_rope len alt=
+  (* alternating which side a new rope is concatenated *)
     let rec build_alternate len acc lr_flag =
       if(len = 0) then
         acc
@@ -83,7 +82,6 @@ module Make (M : StringLike) = struct
   let map_unbalanced = fun () -> ignore(M.map f_map unbalanced_rope)
 
 end
-
 
 
 module StringFunctions = Make(StringExtended)
