@@ -22,8 +22,8 @@ module Make(M : BufferLike) = struct
   (* varying loop_times and str_len while keeping total_len
   constant gives some interesting difference between buffer
   ropeBuffer *)
-  let loop_times = 100
-  let str_len = 300
+  let loop_times = 10000
+  let str_len = 3
   let total_len = loop_times * str_len
 
   let build_str () = 
@@ -51,8 +51,10 @@ end
 module BufferFunctions = Make(Buffer)
 module RopeBufferFunctions = Make(RopeBuffer)
 module CompactRopeBufferFunctions = Make(CompactRopeBuffer)
+module SubRopeBufferFunctions = Make(SubRopeBuffer)
+module CompactSubRopeBufferFunctions = Make(CompactSubRopeBuffer)
 
-(* let () = 
+let () = 
   Command.run(Bench.make_command [  
     Bench.Test.create 
       ~name: "buffer_str_cat" BufferFunctions.str_cat_clean;
@@ -60,12 +62,18 @@ module CompactRopeBufferFunctions = Make(CompactRopeBuffer)
       ~name: "ropeBuffer_str_cat" RopeBufferFunctions.str_cat_clean;
     Bench.Test.create 
       ~name: "compactRopeBuffer_str_cat" CompactRopeBufferFunctions.str_cat_clean;
-  ]) *)
+    Bench.Test.create 
+      ~name: "subRopeBuffer_str_cat" SubRopeBufferFunctions.str_cat_clean;
+    Bench.Test.create 
+      ~name: "compactSubRopeBuffer_str_cat" CompactSubRopeBufferFunctions.str_cat_clean;
+  ])
 
 let () = 
   Command.run(Bench.make_command [  
     Bench.Test.create ~name: "buffer_str_sub" BufferFunctions.str_sub;
     Bench.Test.create ~name: "ropeBuffer_str_sub" RopeBufferFunctions.str_sub;
     Bench.Test.create ~name: "compactRopeBuffer_str_sub" CompactRopeBufferFunctions.str_sub;
+    Bench.Test.create ~name: "subRopeBuffer_str_sub" SubRopeBufferFunctions.str_sub;
+    Bench.Test.create ~name: "compactSubRopeBuffer_str_sub" CompactSubRopeBufferFunctions.str_sub;
   ])
 
